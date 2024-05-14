@@ -1,0 +1,15 @@
+diff --git a/Makefile b/Makefile
+--- a/Makefile
++++ b/Makefile
+@@ -147,6 +146,11 @@ obj/%.o: $(srcdir)/%.s
+ obj/%.o: $(srcdir)/%.S
+        $(CC_CMD)
+ 
++obj/src/malloc/mimalloc/static.o: CFLAGS += -O3 -DNDEBUG -std=gnu11 -DMI_LIBC_MUSL=1 -DMI_MUSL_BUILTIN -DMI_MALLOC_OVERRIDE -fvisibility=hidden
++obj/src/malloc/mimalloc/static.o: CFLAGS_ALL := -I$(srcdir)/include $(CFLAGS_ALL)
++obj/src/malloc/mimalloc/static.lo: CFLAGS += -O3 -DNDEBUG -std=gnu11 -DMI_LIBC_MUSL=1 -DMI_MUSL_BUILTIN -DMI_MALLOC_OVERRIDE -fvisibility=hidden
++obj/src/malloc/mimalloc/static.lo: CFLAGS_ALL := -I$(srcdir)/include $(CFLAGS_ALL)
++
+ obj/%.o: $(srcdir)/%.c $(GENH) $(IMPH)
+        $(CC_CMD)
+ 

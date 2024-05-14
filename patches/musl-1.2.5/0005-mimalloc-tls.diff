@@ -1,0 +1,137 @@
+diff --git a/ldso/dynlink.c b/ldso/dynlink.c
+index 324aa859..af55cc59 100644
+--- a/ldso/dynlink.c
++++ b/ldso/dynlink.c
+@@ -1791,6 +1791,10 @@ void __dls2b(size_t *sp, size_t *auxv)
+ 	else ((stage3_func)laddr(&ldso, dls3_def.sym->st_value))(sp, auxv);
+ }
+ 
++static void __mi_process_init(void) {
++}
++weak_alias(__mi_process_init, _mi_process_init);
++
+ /* Stage 3 of the dynamic linker is called with the dynamic linker/libc
+  * fully functional. Its job is to load (if not already loaded) and
+  * process dependencies and relocations for the main application and
+@@ -1812,6 +1816,9 @@ void __dls3(size_t *sp, size_t *auxv)
+ 	/* Find aux vector just past environ[] and use it to initialize
+ 	 * global data that may be needed before we can make syscalls. */
+ 	__environ = envp;
++
++	_mi_process_init();
++
+ 	decode_vec(auxv, aux, AUX_CNT);
+ 	search_vec(auxv, &__sysinfo, AT_SYSINFO);
+ 	__pthread_self()->sysinfo = __sysinfo;
+diff --git a/src/env/__init_tls.c b/src/env/__init_tls.c
+index a93141ed..d10e40c7 100644
+--- a/src/env/__init_tls.c
++++ b/src/env/__init_tls.c
+@@ -11,6 +11,12 @@
+ 
+ volatile int __thread_list_lock;
+ 
++/*
++static void *___mi_heap_empty_ptr = 0;
++weak_alias(___mi_heap_empty_ptr, __mi_heap_empty_ptr);
++*/
++extern void *__mi_heap_empty_ptr;
++
+ int __init_tp(void *p)
+ {
+ 	pthread_t td = p;
+@@ -24,6 +30,8 @@ int __init_tp(void *p)
+ 	td->robust_list.head = &td->robust_list.head;
+ 	td->sysinfo = __sysinfo;
+ 	td->next = td->prev = td;
++	td->mi_recurse = 0;
++	td->mi_default_heap = __mi_heap_empty_ptr;
+ 	return 0;
+ }
+ 
+diff --git a/src/env/__libc_start_main.c b/src/env/__libc_start_main.c
+index c5b277bd..9ed603f9 100644
+--- a/src/env/__libc_start_main.c
++++ b/src/env/__libc_start_main.c
+@@ -15,6 +15,8 @@ extern weak hidden void (*const __init_array_start)(void), (*const __init_array_
+ static void dummy1(void *p) {}
+ weak_alias(dummy1, __init_ssp);
+ 
++weak_alias(dummy, _mi_process_init);
++
+ #define AUX_CNT 38
+ 
+ #ifdef __GNUC__
+@@ -39,6 +41,8 @@ void __init_libc(char **envp, char *pn)
+ 	__init_tls(aux);
+ 	__init_ssp((void *)aux[AT_RANDOM]);
+ 
++	_mi_process_init();
++
+ 	if (aux[AT_UID]==aux[AT_EUID] && aux[AT_GID]==aux[AT_EGID]
+ 		&& !aux[AT_SECURE]) return;
+ 
+diff --git a/src/internal/pthread_impl.h b/src/internal/pthread_impl.h
+index de2b9d8b..6cb0667f 100644
+--- a/src/internal/pthread_impl.h
++++ b/src/internal/pthread_impl.h
+@@ -59,6 +59,9 @@ struct pthread {
+ 	char *dlerror_buf;
+ 	void *stdio_locks;
+ 
++	void *mi_default_heap;
++	_Bool mi_recurse;
++
+ 	/* Part 3 -- the positions of these fields relative to
+ 	 * the end of the structure is external and internal ABI. */
+ #ifdef TLS_ABOVE_TP
+diff --git a/src/thread/__mimalloc_default_heap_location.c b/src/thread/__mimalloc_default_heap_location.c
+new file mode 100644
+index 00000000..e0dbf161
+--- /dev/null
++++ b/src/thread/__mimalloc_default_heap_location.c
+@@ -0,0 +1,8 @@
++#include "pthread_impl.h"
++
++void **___mimalloc_default_heap_location(void)
++{
++	return &__pthread_self()->mi_default_heap;
++}
++
++weak_alias(___mimalloc_default_heap_location, __mimalloc_default_heap_location);
+diff --git a/src/thread/__mimalloc_recurse_location.c b/src/thread/__mimalloc_recurse_location.c
+new file mode 100644
+index 00000000..510460d5
+--- /dev/null
++++ b/src/thread/__mimalloc_recurse_location.c
+@@ -0,0 +1,8 @@
++#include "pthread_impl.h"
++
++_Bool *___mimalloc_recurse_location(void)
++{
++	return &__pthread_self()->mi_recurse;
++}
++
++weak_alias(___mimalloc_recurse_location, __mimalloc_recurse_location);
+diff --git a/src/thread/pthread_create.c b/src/thread/pthread_create.c
+index 087f6206..fd132ae5 100644
+--- a/src/thread/pthread_create.c
++++ b/src/thread/pthread_create.c
+@@ -20,6 +20,8 @@ weak_alias(dummy_0, __membarrier_init);
+ static int tl_lock_count;
+ static int tl_lock_waiters;
+ 
++extern void *__mi_heap_empty_ptr;
++
+ void __tl_lock(void)
+ {
+ 	int tid = __pthread_self()->tid;
+@@ -327,6 +329,8 @@ int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict att
+ 	new->robust_list.head = &new->robust_list.head;
+ 	new->canary = self->canary;
+ 	new->sysinfo = self->sysinfo;
++	new->mi_recurse = self->mi_recurse;
++	new->mi_default_heap = __mi_heap_empty_ptr;
+ 
+ 	/* Setup argument structure for the new thread on its stack.
+ 	 * It's safe to access from the caller only until the thread

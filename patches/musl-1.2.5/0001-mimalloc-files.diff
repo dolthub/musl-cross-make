@@ -1,0 +1,42 @@
+diff --git /dev/null b/src/malloc/mimalloc/libc_calloc.c
+--- /dev/null
++++ b/src/malloc/mimalloc/libc_calloc.c
+@@ -0,0 +1,7 @@
++#include <stdlib.h>
++
++void *calloc(size_t m, size_t n);
++
++void *__libc_calloc(size_t m, size_t n) {
++       return calloc(m, n);
++}
+--- /dev/null
++++ b/src/malloc/mimalloc/libc_donate.c
+@@ -0,0 +1,2 @@
++void __malloc_donate(char *, char *) {
++}
+--- /dev/null
++++ b/src/malloc/mimalloc/libc_free.c
+@@ -0,0 +1,5 @@
++void free(void *);
++
++void __libc_free(void *p) {
++       free(p);
++}
+--- /dev/null
++++ b/src/malloc/mimalloc/libc_realloc.c
+@@ -0,0 +1,7 @@
++#include <stddef.h>
++
++void *realloc(void *p, size_t n);
++
++void *__libc_realloc(void *p, size_t n) {
++       return realloc(p, n);
++}
+diff --git a/include/empty.h b/include/empty.h
+new file mode 100644
+index 00000000..139597f9
+--- /dev/null
++++ b/src/internal/empty.h
+@@ -0,0 +1,2 @@
++
++

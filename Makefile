@@ -9,6 +9,7 @@ GMP_VER = 6.1.2
 MPC_VER = 1.1.0
 MPFR_VER = 4.0.2
 LINUX_VER = headers-4.19.88-2
+MIMALLOC_VER = 2.1.4
 
 GNU_SITE = https://ftpmirror.gnu.org/gnu
 GCC_SITE = $(GNU_SITE)/gcc
@@ -37,7 +38,7 @@ REL_TOP = ../../..
 
 -include config.mak
 
-SRC_DIRS = gcc-$(GCC_VER) binutils-$(BINUTILS_VER) musl-$(MUSL_VER) \
+SRC_DIRS = gcc-$(GCC_VER) binutils-$(BINUTILS_VER) musl-$(MUSL_VER) mimalloc-$(MIMALLOC_VER) \
 	$(if $(GMP_VER),gmp-$(GMP_VER)) \
 	$(if $(MPC_VER),mpc-$(MPC_VER)) \
 	$(if $(MPFR_VER),mpfr-$(MPFR_VER)) \
@@ -47,7 +48,7 @@ SRC_DIRS = gcc-$(GCC_VER) binutils-$(BINUTILS_VER) musl-$(MUSL_VER) \
 all:
 
 clean:
-	rm -rf gcc-* binutils-* musl-* gmp-* mpc-* mpfr-* isl-* build build-* linux-*
+	rm -rf gcc-* binutils-* musl-* gmp-* mpc-* mpfr-* isl-* build build-* linux-* mimalloc-*
 
 distclean: clean
 	rm -rf sources
@@ -87,6 +88,13 @@ $(SOURCES)/%: hashes/%.sha1 | $(SOURCES)
 	cd $@.tmp && $(DL_CMD) $(notdir $@) $(SITE)/$(notdir $@)
 	cd $@.tmp && touch $(notdir $@)
 	cd $@.tmp && $(SHA1_CMD) $(CURDIR)/hashes/$(notdir $@).sha1
+	mv $@.tmp/$(notdir $@) $@
+	rm -rf $@.tmp
+
+$(SOURCES)/mimalloc-2.1.4.tar.gz: | $(SOURCES)
+	mkdir -p $@.tmp
+	cd $@.tmp && $(DL_CMD) $(notdir $@) https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.4.tar.gz
+	cd $@.tmp && touch $(notdir $@)
 	mv $@.tmp/$(notdir $@) $@
 	rm -rf $@.tmp
 
@@ -138,6 +146,43 @@ musl-git-%:
 	( cd $@.tmp && $(COWPATCH) -I ../$< )
 	test ! -d patches/$@ || cat patches/$@/* | ( cd $@.tmp && $(COWPATCH) -p1 )
 	if test -f $</configfsf.sub ; then cs=configfsf.sub ; elif test -f $</config.sub ; then cs=config.sub ; else exit 0 ; fi ; rm -f $@.tmp/$$cs && cp -f $(SOURCES)/config.sub $@.tmp/$$cs && chmod +x $@.tmp/$$cs
+	rm -rf $@
+	mv $@.tmp $@
+
+musl-$(MUSL_VER): | mimalloc-$(MIMALLOC_VER)
+
+musl-$(MUSL_VER): musl-$(MUSL_VER).orig | $(SOURCES)/config.sub
+	case "$@" in */*) exit 1 ;; esac
+	rm -rf $@.tmp
+	mkdir $@.tmp
+	( cd $@.tmp && $(COWPATCH) -I ../$< )
+	test ! -d patches/$@ || cat patches/$@/* | ( cd $@.tmp && $(COWPATCH) -p1 )
+	if test -f $</configfsf.sub ; then cs=configfsf.sub ; elif test -f $</config.sub ; then cs=config.sub ; else exit 0 ; fi ; rm -f $@.tmp/$$cs && cp -f $(SOURCES)/config.sub $@.tmp/$$cs && chmod +x $@.tmp/$$cs
+	( cd $@.tmp && mkdir -p src/malloc/mimalloc/internal/prim/unix )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/alloc-override.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/alloc.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/alloc-aligned.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/alloc-posix.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/arena.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/bitmap.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/bitmap.h src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/free.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/heap.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/init.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/libc.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/options.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/os.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/page-queue.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/page.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/random.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/segment.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/segment-map.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/stats.c src/malloc/mimalloc/internal/ )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/prim/prim.c src/malloc/mimalloc/internal/prim )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/prim/unix/prim.c src/malloc/mimalloc/internal/prim/unix )
+	( cd $@.tmp && cp ../mimalloc-$(MIMALLOC_VER)/src/static.c src/malloc/mimalloc/ )
+	( cd $@.tmp && cp -RLpf ../mimalloc-$(MIMALLOC_VER)/include/ src/internal/ )
+	( cd $@.tmp && sed -i'' -e '20,$$s|#include "|#include "internal/|' src/malloc/mimalloc/static.c )
 	rm -rf $@
 	mv $@.tmp $@
 
